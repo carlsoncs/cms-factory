@@ -36,11 +36,12 @@ function getWebsite(websiteUrl, next){
 }
 
 function siteDL(siteDLfolder, hostName, next){
-  let dirname = siteDLfolder;
-  if(!fs.existsSync(dirname)){
-    sh.mkdir('-p',dirname);
+  if(!fs.existsSync(siteDLfolder)){
+    sh.mkdir('-p',siteDLfolder);
   }
-  sh.cd(dirname);
+
+  getResources(siteDLfolder);
+  sh.cd(siteDLfolder);
   sh.exec(`wget --recursive --mirror --timestamping -c --page-requisites -p -nc --html-extension -F --convert-links --restrict-file-names=windows --domains ${hostName} --no-parent --user-agent='Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.9.0.3) Gecko/2008092416 Firefox/3.0.3' --limit-rate=2M --random-wait -e robots=off ${hostName}.html`);
   setTimeout(next, 10000);
 }
@@ -76,12 +77,12 @@ function getResources(website)
 {
   request
     .get(website)
-    .on('response', function(httpMessage){
+    .on('response', function(response){
       response.on('data', function(data){
         let $ = cheerio.load(data);
         let refs = $('[href]', '[src]').map(function(i, el){
-          $e = cheerio.load(el);
-          refVal = (t = $e.attr('href').text())? t : $e.attr('src').text();
+          let  $e = cheerio.load(el);
+          let  refVal = ($e.attr('href').text())? $e.attr('href').text() : $e.attr('src').text();
           if(TESTING) {console.log(`GOT RESOURCE: raw ${el} returning ${refVal}`);}
 
           return refVal? refVal : null;
@@ -92,13 +93,11 @@ function getResources(website)
       console.error(err);
     })
     .on('end', function(){
-      console.log(`Response from ${httpMessage.url} ended.\nSTATUS CODE: ${httpMessage.statusCode}, ${httpMessage.statusMessage}`);
+      console.log(`Response from ${response.url} ended.\nSTATUS CODE: ${response.statusCode}, ${response.statusMessage}`);
       response.end();
     });
 
-    }
-
-    }
+    });
 }
 
 
@@ -107,7 +106,7 @@ function downloadRefs(referecesArray){
   referecesArray.each(function(ref){
     //Download all of them.
     console.log(`Preparing to download reference ${counter}: ${ref}`);
-  }
+  });
 }
 function newSrcHandler(){}
 
