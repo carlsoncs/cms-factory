@@ -21,9 +21,9 @@ function getWebsite(websiteUrl, next){
   let rootDir = __dirname + path.sep;
   let pubDir = rootDir + 'public' + path.sep;
   let dlDir = pubDir + 'DL' + path.sep;
-  let siteDLdir = dlDir + url.parse(websiteUrl).hostname + path.sep;
+  let siteDLdir = dlDir + hostName + path.sep;
   let siteMain = siteDLdir + 'index.html';
-  let cb = function() { return readAndSendFile(siteMain, next);};
+  let cb = function() { return readAndSendFile(`${siteDLdir}index.html`, next);};
 
   siteDL(siteDLdir, hostName, cb);
 
@@ -39,10 +39,10 @@ function siteDL(siteDLfolder, hostName, next){
   if(!fs.existsSync(siteDLfolder)){
     sh.mkdir('-p',siteDLfolder);
   }
-
-  getResources(siteDLfolder);
+  console.log(`Hostname has value: ${hostName}`);
+  getResources(`https://${hostName}${path.sep}index.html`);
   sh.cd(siteDLfolder);
-  sh.exec(`wget --recursive --mirror --timestamping -c --page-requisites -p -nc --html-extension -F --convert-links --restrict-file-names=windows --domains ${hostName} --no-parent --user-agent='Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.9.0.3) Gecko/2008092416 Firefox/3.0.3' --limit-rate=2M --random-wait -e robots=off ${hostName}.html`);
+  sh.exec(`wget --recursive --mirror --timestamping -c --page-requisites -p -nc --html-extension -F --convert-links --restrict-file-names=windows --domains ${hostName}${path.sep} --no-parent --user-agent='Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.9.0.3) Gecko/2008092416 Firefox/3.0.3' --limit-rate=2M --random-wait -e robots=off ${hostName}/index.html`);
   setTimeout(next, 10000);
 }
 
@@ -73,7 +73,7 @@ function strSplit(str){
   });
 }
 
-function getResources(website)
+function getResources(localWebsite)
 {
   request
     .get(website)
@@ -94,16 +94,16 @@ function getResources(website)
     })
     .on('end', function(){
       console.log(`Response from ${response.url} ended.\nSTATUS CODE: ${response.statusCode}, ${response.statusMessage}`);
-      response.end();
     });
 
     });
 }
 
 
-function downloadRefs(referecesArray){
+function downloadRefs(referencesArray){
   let counter = 1;
-  referecesArray.each(function(ref){
+  console.log(`ReferencesArray: ${referencesArray}`);
+  referencesArray.forEach(function(ref){
     //Download all of them.
     console.log(`Preparing to download reference ${counter}: ${ref}`);
   });
