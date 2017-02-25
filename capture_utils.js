@@ -5,122 +5,154 @@ let cheerio = require('cheerio');
 let request = require('request');
 let sanitize = require('sanitize-html');
 let https = require('https');
+let readStream = require('stream').Readable;
 let sh = require('shelljs');
 
 const TESTING = 1;
-let retries = 0;
-let lastUse = null;
 
 
 function getWebsite(websiteUrl, next){
-  if(lastUse == null) lastUse = Date.now();
-  if(Date.now() - lastUse > 100000){
-    retries = 1;
-  }
+  Object.defineProperty(this, 'lastly', next);
   let hostName = url.parse(websiteUrl).hostname;
-  let rootDir = __dirname + path.sep;
-  let pubDir = rootDir + 'public' + path.sep;
-  let dlDir = pubDir + 'DL' + path.sep;
-  let siteDLdir = dlDir + hostName + path.sep;
-  let siteMain = siteDLdir + 'index.html';
-  let cb = function() { return readAndSendFile(`${siteDLdir}index.html`, next);};
-
-  siteDL(siteDLdir, hostName, cb);
-
-  let localContents = sh.ls('-RAl', `${__dirname}${path.sep}public`).toString();
-  strSplit(localContents);
-
-
-
-
+  Object.defineProperty(this, 'hostName', {
+    value: hostName,
+    writeable: false,
+    enumerable: true,
+    configurable: false
+  });
+  if(TESTING){ console.log(`At getWebste, next is ${next.name}:\n\t${next.toString()}`);}
+  siteDL(websiteUrl);
 }
 
-function siteDL(siteDLfolder, hostName, next){
-  if(!fs.existsSync(siteDLfolder)){
-    sh.mkdir('-p',siteDLfolder);
-  }
-  console.log(`Hostname has value: ${hostName}`);
-  getResources(`https://${hostName}${path.sep}index.html`);
-  sh.cd(siteDLfolder);
-  sh.exec(`wget --recursive --mirror --timestamping -c --page-requisites -p -nc --html-extension -F --convert-links --restrict-file-names=windows --domains ${hostName}${path.sep} --no-parent --user-agent='Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.9.0.3) Gecko/2008092416 Firefox/3.0.3' --limit-rate=2M --random-wait -e robots=off ${hostName}/index.html`);
-  setTimeout(next, 10000);
+
+function siteDL(siteUrl){
+  let saveDir = `${__dirname}${path.sep}${this.hostName}${path.sep}index.html`;
+  if(TESTING) {console.log(`Hostname has value: ${this.hostName}\n`);}
+  let next = resourceHandler.bind(undefined, saveDir);
+  dlResource(siteUrl, next);
+}
+
+function dlResource(resourceUrl, next){
+  request.get(resourceUrl)
+    .on('error', function(err){
+      console.error(`Request for ${resourceUrl} failed with:\n${err}`);
+    })
+    .on('response', function(response){
+      let data = '';
+      console.log(`Response from ${resourceUrl}:\nResponse Code: ${response.statusCode}\nMessage: ${response.statusMessage}`);
+      response.on('data', function(chunk){
+        console.log(`Recieved another chunk of data from ${resourceUrl}.`);
+        data += chunk;
+      })
+        .on('end', function(){
+          debugger //eslint-disable-line
+          console.log(`Finished getting data from ${resourceUrl}. Sending to ${ next.name }.`);
+          next(data);
+        });
+
+    });
+
 }
 
 function readAndSendFile(siteMain, next){
-  let fileName = siteMain;
+  let fileName = 'index.html';
+  let dirName = `${__dirname}${siteMain}${path.sep}`;
 
-  fs.readFileSync(fileName, 'utf8', function(err, data){
+  fs.readFileSync(dirName+fileName, 'utf8', function(err, data){
     if(err) {
-      if(retries == 0) {
-
-        console.error('Error reading the file. Trying again.');
-        return readAndSendFile(siteMain, next);
-      }else{
-        throw new Error;
-      }
+      console.error(`Error Reading File: ${err}`);
     }
     next(data);
 
   });
 }
 
-function strSplit(str){
-  let stArr = [];
-  stArr = str.split(['(UTC)']);
 
-  stArr.forEach(function(s){
-    console.log(s);
+
+function resourceHandler(saveTo, html)
+{
+  debugger //eslint-disable-line
+  if(TESTING) {console.log(`From resourceHandler: \n\tsaveto: ${saveTo}\n\tCalled By: ${this.name } `);}
+  let imagesD = `${saveTo}${path.sep}images`;
+  let styleSheet = `${saveTo}${path.sep}${this.hostName}.css`;
+  let scriptsD = `${saveTo}${path.sep}js`;
+  [imagesD, scriptsD].forEach(function(loc){
+    if(!fs.existsSync(loc)){
+      sh.mkdir('-p', loc);
+    }
+  });
+
+  Object.defineProperty(this, 'imagesD', {
+    value: imagesD
+  });
+
+
+  writeFile(`${saveTo}.b.html`, html, function(saveTo){console.log(`Wrote Initial Downloaded Version of file: ${this.hostName} to ${saveTo}`);});
+
+  let smC = imagesManager.bind(undefined, cheer(html), imagesD, this.lastly);
+  let smB = stylesManager.bind(undefined, cheer(html), styleSheet, smC);
+  let smA = scriptsManager.call(undefined, cheer(html), scriptsD, smB);
+
+
+  Object.defineProperty(resourceHandler, 'name'
+      ,{  __proto__: null,
+              value: 'resourceHandler'}); //eslint-disable-line
+              debugger //eslint-disable-line
+}
+
+function reWriteHtml(html, saveTo){
+  let $ = cheerio.load(html);
+  let hostName = this.hostName;
+
+  $(":contains('"+ this.hostName + "')").each(function(str, i){//eslint-disable-line
+    this.text(String.prototype.replace(hostName, `file://${saveTo}`));
+  });
+
+  writeFile(saveTo, $.html(), renderLocalVersion(saveTo));
+}
+
+function cheer(html){
+  return cheerio.load(html);
+}
+
+
+
+function writeFile(saveTo, content, next){
+  debugger //eslint-disable-line
+  fs.writeFile(saveTo, content, function(err){
+    if(err){
+      console.error(`Error: Unable to write file: ${saveTo}.\nDetails: ${err}`);
+      throw new Error(err);
+    }
+    console.log(`Wrote file successfully to ${saveTo}.`);
+    next();
   });
 }
 
-function getResources(localWebsite)
-{
-  request
-    .get(website)
-    .on('response', function(response){
-      response.on('data', function(data){
-        let $ = cheerio.load(data);
-        let refs = $('[href]', '[src]').map(function(i, el){
-          let  $e = cheerio.load(el);
-          let  refVal = ($e.attr('href').text())? $e.attr('href').text() : $e.attr('src').text();
-          if(TESTING) {console.log(`GOT RESOURCE: raw ${el} returning ${refVal}`);}
+function renderLocalVersion(fileLocation){
 
-          return refVal? refVal : null;
-        }).get();
-        downloadRefs(refs);
-      })
-    .on('error', function(err){
-      console.error(err);
-    })
-    .on('end', function(){
-      console.log(`Response from ${response.url} ended.\nSTATUS CODE: ${response.statusCode}, ${response.statusMessage}`);
-    });
-
-    });
 }
-
 
 function downloadRefs(referencesArray){
-  let counter = 1;
   console.log(`ReferencesArray: ${referencesArray}`);
-  referencesArray.forEach(function(ref){
+  referencesArray.forEach(function(ref, counter){
     //Download all of them.
-    console.log(`Preparing to download reference ${counter}: ${ref}`);
+    console.log(`Preparing to download reference ${counter +1}: ${ref}`);
   });
 }
-function newSrcHandler(){}
-
-function writeSrcFile(fileName, src, next){}
 
 
 
 // Inner Function: scriptsManager
-function scriptsManager(jQ)
+function scriptsManager(jQ, saveTo, then)
 {
   if(TESTING) {console.log('SCRIPTS: ');}
   let scripts =[];
   let srcs    = [];
-
+  let cleanedSave;
+  if(saveTo.match(/\w(.html)$/)){
+    cleanedSave = saveTo.replace(/(html)$/, 'js');
+  }
   jQ('script').each(function(i, el){
     let src = cheerio(el).attr('src');
     if(!src){
@@ -129,36 +161,93 @@ function scriptsManager(jQ)
 
     if(TESTING) { console.log(`script${i+1}: ${(src)? srcs[(srcs.length - 1)] : scripts[(scripts.length -1)]}`);}
   });
-  return {'scripts': scripts, 'srcs': srcs};
+
+  let complete = '';
+  scripts.forEach(function(script){
+    complete += `\n<script>\n${script}\n</script>\n`;
+  });
+  debugger //eslint-disable-line
+
+  let cleanedSrcs = [];
+  srcs.forEach(function(s){
+    if(!s.match(/^[https://]{1}\w/)){
+      let n = `https://${this.hostName}${path.sep}${s}`;
+      cleanedSrcs.push(n);
+    }else {
+      cleanedSrcs.push(s);
+    }
+  });
+
+  dlAndCat(cleanedSrcs, complete, cleanedSave? cleanedSave : saveTo, then);
+}
+
+function dlAndWrite(resourceUrls, saveTo, then){
+  if(TESTING) { console.log(`From DL: \n\tsaveTo: ${saveTo} \n\tresourceUrls: ${resourceUrls.toString()}`);}
+  let b, to;
+
+  resourceUrls.forEach(function(resource, i){
+    if(!resource.match(/^(http)\w/)){
+      let t = `https://${this.hostName}/${resource}`;
+      resourceUrls[i] = t;
+    }
+  });
+
+  resourceUrls.forEach(function(resource){
+    if(resourceUrls.length === 1){
+      dlResource(resource, function(data){
+        b = `${path.parse(resource).base()}`;
+        to = `${saveTo}${path.sep}${b}`;
+        console.log(`Saved ${b} to ${to}, and \npassed control to ${then.name}`);
+        return writeFile(to, data, then);
+      });
+    }else{
+      dlResource(resource, function(data){
+        return writeFile(data, to, function(){
+          console.log(`Saved ${resource.toString} to ${saveTo}`);
+        });
+      });}
+  });
+}
+
+function dlAndCat(resourceUrls, addTo, saveTo, then){
+  if(TESTING) { console.log(`From dlAndCat: \n\tsaveTo: ${saveTo} \n\tresourceUrls: ${resourceUrls}`);}
+  if(resourceUrls.length === 0){
+    return writeFile(saveTo, addTo, then);
+  }
+  let resource = resourceUrls.pop();
+  dlResource(resource, function(html){
+    addTo = `\n\n<script>${html}\n</script>\n\n${addTo}`;
+    return dlAndCat(resourceUrls, addTo, saveTo, then);
+  });
 }
 
 
   // Inner Function: stylesManager
-function stylesManager(jQ){
+function stylesManager(jQ, saveTo, next){
   if(TESTING){ console.log('STYLES: ');}
-
-  let links = [];
+  let cssFile = `${saveTo}${path.sep}index.css`;
+  let icons = [];
   let styles = [];
 
-  jQ('link').each(function(i, el){
-    let l = jQ(this).attr('href');
-    if(TESTING) { console.log(`link${i}: ${l}`);}
 
-    links.push(l);
+  jQ('link', 'style').each(function(i, el){
+    let l = jQ(this).attr('href', 'src');
+    if(TESTING) { console.log(`found: ${i}: ${l}`);}
+
+    filterStyles(l)? styles.push(l) : icons.push(l);
   });
 
-  jQ('style').each(function(i, el){
-    let e = jQ(this).html();
-    if(TESTING) { console.log(`style${i}: ${e} `);}
-    styles.push(e);
-  });
 
-  return {'links': links, 'styles': styles};
+
 }
 
+function filterStyles(fileName){
+  if(fileName.match(/\w(.css)$/)) return true;
+  return false;
+}
 
   // Inner Function imagesManager
-function imagesManager(jQ){
+function imagesManager(jQ, saveTo, next){
   if(TESTING) { console.log('IMAGES: '); }
   let imageRefs = [];
 
@@ -171,12 +260,4 @@ function imagesManager(jQ){
   return {'imageRefs': imageRefs};
 }
 
-
-
-
-function cleanUp(){
-  sh.rm('-rf', 'app/public/DL/undefined*');
-  sh.rm('-rf', 'app/public/undefined*');
-  sh.rm('-rf', 'app/public/slate.law');
-}
 module.exports = getWebsite;

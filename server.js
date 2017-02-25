@@ -25,9 +25,14 @@ app.use(express.static('public'));
 // http://expressjs.com/en/starter/basic-routing.html
 app.get('/', function (request, response) {
 
-  cap('https://slate.law', (body, resources) => {
-    response.render('webContent', {'captured_html': body });
-  });
+  function renderTemplateBody(body){
+    response.render('webContent', {'captured_html': body });}
+  Object.defineProperty(renderTemplateBody, 'name',
+    { __proto__: null,
+      value: 'renderTemplateBody'  });
+  let lastly = renderTemplateBody.bind(this);
+
+  cap('https://slate.law', lastly);
 });
 
 
