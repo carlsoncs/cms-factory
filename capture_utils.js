@@ -45,7 +45,7 @@ function dlResource(resourceUrl, next){
         data += chunk;
       })
         .on('end', function(){
-          debugger //eslint-disable-line
+          //debugger //eslint-disable-line
           console.log(`Finished getting data from ${resourceUrl}. Sending to ${ next.name }.`);
           next(data);
         });
@@ -75,7 +75,7 @@ function resourceHandler(saveTo, html)
   if(TESTING) {console.log(`From resourceHandler: \n\tsaveto: ${saveTo}\n\tCalled By: ${this.name } `);}
   let imagesD = `${saveTo}${path.sep}images`;
   let styleSheet = `${saveTo}${path.sep}${this.hostName}.css`;
-  let scriptsD = `${saveTo}${path.sep}js`;
+  let scriptsD = `${saveTo}`;
   [imagesD, scriptsD].forEach(function(loc){
     if(!fs.existsSync(loc)){
       sh.mkdir('-p', loc);
@@ -97,7 +97,7 @@ function resourceHandler(saveTo, html)
   Object.defineProperty(resourceHandler, 'name'
       ,{  __proto__: null,
               value: 'resourceHandler'}); //eslint-disable-line
-              debugger //eslint-disable-line
+              //debugger //eslint-disable-line
 }
 
 function reWriteHtml(html, saveTo){
@@ -166,7 +166,7 @@ function scriptsManager(jQ, saveTo, then)
   scripts.forEach(function(script){
     complete += `\n<script>\n${script}\n</script>\n`;
   });
-  debugger //eslint-disable-line
+  //debugger //eslint-disable-line
 
   let cleanedSrcs = [];
   srcs.forEach(function(s){
@@ -182,36 +182,48 @@ function scriptsManager(jQ, saveTo, then)
 }
 
 function dlAndWrite(resourceUrls, saveTo, then){
-  if(TESTING) { console.log(`From DL: \n\tsaveTo: ${saveTo} \n\tresourceUrls: ${resourceUrls.toString()}`);}
   let b, to;
+  let tos, bs = [];
+  debugger //eslint-disable-line
 
   resourceUrls.forEach(function(resource, i){
     if(!resource.match(/^(http)\w/)){
-      let t = `https://${this.hostName}/${resource}`;
-      resourceUrls[i] = t;
+      let fixed = `https://${this.hostName}/${resource}`;
+      resourceUrls[i] = fixed;
     }
+    b = `${path.parse(resource).base}`;
+    to = `${saveTo}${path.sep}${b}`;
+    tos.push(to);
+    bs.push(b);
+
   });
 
-  resourceUrls.forEach(function(resource){
-    if(resourceUrls.length === 1){
-      dlResource(resource, function(data){
-        b = `${path.parse(resource).base()}`;
-        to = `${saveTo}${path.sep}${b}`;
-        console.log(`Saved ${b} to ${to}, and \npassed control to ${then.name}`);
-        return writeFile(to, data, then);
+  if(TESTING) {bs.forEach((e,m)=> {console.log(`Preparing to download ${e} to ${tos[m]}.`);});}
+  while(resourceUrls.length > 0){
+    let base = bs.pop();
+    let savePath = tos.pop();
+    let resUrl = resourceUrls.pop();
+    if(TESTING) {console.log(`Verify these remain ordered -- \n\tBase: ${base}\n\tSavePath: ${savePath}\n\tURL: ${resUrl}`);}
+    if(resourceUrls.length === 0){
+      let cb = writeFile.bind(undefined, savePath);
+      cb = Object.defineProperty(cb, 'writeFileThen', {
+        __proto__: writeFile,
+        value    : this.then
+      });
+      dlResource(resUrl, function(data){
+        console.log(`Sent ${base} to ${savePath}, and \npassed control to ${then.name}`);
+        return writeFile(savePath, data);
       });
     }else{
-      dlResource(resource, function(data){
-        return writeFile(data, to, function(){
-          console.log(`Saved ${resource.toString} to ${saveTo}`);
-        });
-      });}
-  });
+      dlResource(resUrl,  (data)=>{writeFile(data);});
+    }
+  }
 }
 
 function dlAndCat(resourceUrls, addTo, saveTo, then){
   if(TESTING) { console.log(`From dlAndCat: \n\tsaveTo: ${saveTo} \n\tresourceUrls: ${resourceUrls}`);}
   if(resourceUrls.length === 0){
+    debugger //eslint-disable-line
     return writeFile(saveTo, addTo, then);
   }
   let resource = resourceUrls.pop();
@@ -224,30 +236,36 @@ function dlAndCat(resourceUrls, addTo, saveTo, then){
 
   // Inner Function: stylesManager
 function stylesManager(jQ, saveTo, next){
+  debugger //eslint-disable-line
   if(TESTING){ console.log('STYLES: ');}
   let cssFile = `${saveTo}${path.sep}index.css`;
   let icons = [];
   let styles = [];
 
 
-  jQ('link', 'style').each(function(i, el){
-    let l = jQ(this).attr('href', 'src');
+  jQ('link').each(function(i, el){
+    let l = cheerio(this).attr('href').toString();
+
     if(TESTING) { console.log(`found: ${i}: ${l}`);}
 
     filterStyles(l)? styles.push(l) : icons.push(l);
   });
 
 
+  dlAndWrite(styles, saveTo, next);
+  dlAndWrite(icons, this.imagesD, function(){console.log(`Downloaded ${icons.toString}\n`);});
+
 
 }
 
 function filterStyles(fileName){
-  if(fileName.match(/\w(.css)$/)) return true;
+  if(fileName.toString().match(/\w(.css)$/)) return true;
   return false;
 }
 
   // Inner Function imagesManager
 function imagesManager(jQ, saveTo, next){
+  debugger //eslint-disable-line
   if(TESTING) { console.log('IMAGES: '); }
   let imageRefs = [];
 
